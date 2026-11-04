@@ -8,14 +8,12 @@
 #include "font.h"
 #include "history.h"
 #include "oled.h"
+#include "ui_theme.h"
 
 #define OLED_I2C_ADDR 0x3C
-#define OLED_WIDTH 128
-#define OLED_HEIGHT 64
 #define OLED_PAGES (OLED_HEIGHT / 8)
 
-#define CHART_TOP 8 // rows 0-6 are the text line, row 7 is a gap
-#define CHART_HEIGHT (OLED_HEIGHT - CHART_TOP)
+#define CHART_HEIGHT (OLED_HEIGHT - OLED_CHART_TOP)
 
 static const char *TAG = "OLED";
 
@@ -155,10 +153,10 @@ void oled_render(int rssi, const char *mode) {
 
     char text[16];
     snprintf(text, sizeof(text), "RSSI:%d", rssi);
-    draw_string(0, 0, text, 1);
+    draw_string(0, 0, text, OLED_TEXT_SCALE);
 
-    int mode_width = (int)strlen(mode) * (5 + 1);
-    draw_string(OLED_WIDTH - mode_width, 0, mode, 1);
+    int mode_width = (int)strlen(mode) * (5 + 1) * OLED_TEXT_SCALE;
+    draw_string(OLED_WIDTH - mode_width, 0, mode, OLED_TEXT_SCALE);
 
     rssi_history_push(rssi);
     draw_rssi_chart();

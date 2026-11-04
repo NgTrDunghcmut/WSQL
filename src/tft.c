@@ -12,26 +12,14 @@
 #include "history.h"
 #include "tft.h"
 #include "pins.h"
+#include "ui_theme.h"
 
-#define TFT_WIDTH 320
-#define TFT_HEIGHT 240
-
-#define TFT_BLACK 0x0000
-#define TFT_WHITE 0xFFFF
-
-// Welcome screen palette (RGB565) - teal background, white label box,
-// dark navy text, matching the reference design.
-#define TFT_WELCOME_BG   0x55D4
-#define TFT_WELCOME_BOX  0xFFFF
-#define TFT_WELCOME_TEXT 0x10C4
-
-#define CHART_TOP 28 // below the 7x3=21px text row plus a gap
-#define CHART_HEIGHT (TFT_HEIGHT - CHART_TOP)
+#define CHART_HEIGHT (TFT_HEIGHT - TFT_CHART_TOP)
 
 // ILI9341 commands
 #define ILI9341_SWRESET 0x01
 #define ILI9341_SLPOUT  0x11
-#define ILI9341_INVON   0x21
+#define ILI9341_INVOFF  0x20
 #define ILI9341_DISPON  0x29
 #define ILI9341_CASET   0x2A
 #define ILI9341_PASET   0x2B
@@ -107,6 +95,23 @@ static void tft_fill_rect(int x, int y, int w, int h, uint16_t color) {
     }
     for (int r = 0; r < h; r++) {
         tft_write_data(row_buf, (size_t)w * 2);
+    }
+}
+
+void tft_draw_rgb565_image(const uint16_t *pixels, int width, int height) {
+    if (width > TFT_WIDTH) width = TFT_WIDTH;
+    if (height > TFT_HEIGHT) height = TFT_HEIGHT;
+
+    tft_set_addr_window(0, 0, width - 1, height - 1);
+
+    uint8_t row_buf[TFT_WIDTH * 2];
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            uint16_t color = pixels[y * width + x];
+            row_buf[x * 2] = color >> 8;
+            row_buf[x * 2 + 1] = color & 0xFF;
+        }
+        tft_write_data(row_buf, (size_t)width * 2);
     }
 }
 
@@ -222,10 +227,10 @@ void tft_init(void) {
     uint8_t colmod = 0x55; // 16 bits/pixel (RGB565)
     tft_write_cmd_data(ILI9341_COLMOD, &colmod, 1);
 
-    uint8_t madctl = 0x28; // landscape (MV) + BGR color order
+    uint8_t madctl = 0x48; // portrait (MX) + BGR color order
     tft_write_cmd_data(ILI9341_MADCTL, &madctl, 1);
 
-    tft_write_cmd(ILI9341_INVON);
+    tft_write_cmd(ILI9341_INVOFF);
     tft_write_cmd(ILI9341_DISPON);
     vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -235,44 +240,136 @@ void tft_init(void) {
 }
 
 void tft_render(int rssi, const char *mode) {
-    tft_fill_rect(0, 0, TFT_WIDTH, CHART_TOP, TFT_BLACK); // clear the text row only
+    tft_fill_rect(0, 0, TFT_WIDTH, TFT_CHART_TOP, TFT_BLACK); // clear the text row only
 
     char text[16];
     snprintf(text, sizeof(text), "RSSI:%d", rssi);
-    draw_string(0, 0, text, 3, TFT_WHITE);
+    draw_string(0, 0, text, TFT_RENDER_TEXT_SCALE, TFT_WHITE);
 
-    int mode_width = (int)strlen(mode) * (5 + 1) * 3;
-    draw_string(TFT_WIDTH - mode_width, 0, mode, 3, TFT_WHITE);
+    int mode_width = (int)strlen(mode) * (5 + 1) * TFT_RENDER_TEXT_SCALE;
+    draw_string(TFT_WIDTH - mode_width, 0, mode, TFT_RENDER_TEXT_SCALE, TFT_WHITE);
 
-    tft_fill_rect(0, CHART_TOP, TFT_WIDTH, CHART_HEIGHT, TFT_BLACK); // clear the chart area
+    tft_fill_rect(0, TFT_CHART_TOP, TFT_WIDTH, CHART_HEIGHT, TFT_BLACK); // clear the chart area
     rssi_history_push(rssi);
     draw_rssi_chart();
 }
 
 void tft_show_welcome(void) {
-    tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_WELCOME_BG);
+    tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
 
-    int box_w = 260, box_h = 50, box_r = 10;
-    int box_x = (TFT_WIDTH - box_w) / 2;
-    int box_y = (TFT_HEIGHT - box_h) / 2;
-    tft_fill_round_rect(box_x, box_y, box_w, box_h, box_r, TFT_WELCOME_BOX);
+    int box_x = (TFT_WIDTH - TFT_WELCOME_BOX_W) / 2;
+    int box_y = (TFT_HEIGHT - TFT_WELCOME_BOX_H) / 2;
+    tft_fill_round_rect(box_x, box_y, TFT_WELCOME_BOX_W, TFT_WELCOME_BOX_H, TFT_WELCOME_BOX_R, TFT_WELCOME_BOX);
 
     const char *msg = "WELCOME";
-    const int scale = 3;
-    int text_width = (int)strlen(msg) * (5 + 1) * scale;
-    int text_x = box_x + (box_w - text_width) / 2;
-    int text_y = box_y + (box_h - 7 * scale) / 2;
-    draw_string(text_x, text_y, msg, scale, TFT_WELCOME_TEXT);
+    int text_width = (int)strlen(msg) * (5 + 1) * TFT_WELCOME_TEXT_SCALE;
+    int text_x = box_x + (TFT_WELCOME_BOX_W - text_width) / 2;
+    int text_y = box_y + (TFT_WELCOME_BOX_H - 7 * TFT_WELCOME_TEXT_SCALE) / 2;
+    draw_string(text_x, text_y, msg, TFT_WELCOME_TEXT_SCALE, TFT_WELCOME_TEXT);
+}
+
+void tft_show_mode_select(void) {
+    tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
+
+    // Title bar: white background strip + underline, dark navy text.
+    tft_fill_rect(TFT_TITLE_BOX_X, TFT_TITLE_BOX_Y, TFT_TITLE_BOX_W, TFT_TITLE_BOX_H, TFT_TITLE_BOX);
+    draw_line(TFT_TITLE_BOX_X, TFT_TITLE_UNDERLINE_Y, TFT_TITLE_BOX_X + TFT_TITLE_BOX_W, TFT_TITLE_UNDERLINE_Y, TFT_TITLE_TEXT);
+    draw_string(TFT_TITLE_TEXT_X, TFT_TITLE_TEXT_Y, "WIRELESS SIGNAL QUALITY LOGGER", TFT_TITLE_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    // Three selectable mode boxes.
+    tft_fill_rect(TFT_MODE_BOX_X, TFT_MODE_BOX_WIFI_Y, TFT_MODE_BOX_W, TFT_MODE_BOX_H, TFT_MODE_BOX_COLOR);
+    tft_fill_rect(TFT_MODE_BOX_X, TFT_MODE_BOX_BLE_Y, TFT_MODE_BOX_W, TFT_MODE_BOX_H, TFT_MODE_BOX_COLOR);
+    tft_fill_rect(TFT_MODE_BOX_X, TFT_MODE_BOX_LORA_Y, TFT_MODE_BOX_W, TFT_MODE_BOX_H, TFT_MODE_BOX_COLOR);
+
+    draw_string(TFT_MODE_BOX_X + TFT_MODE_LABEL_OFFSET_X, TFT_MODE_BOX_WIFI_Y + TFT_MODE_LABEL_OFFSET_Y,
+                "WIFI", TFT_MODE_TEXT_SCALE, TFT_TITLE_TEXT);
+    draw_string(TFT_MODE_BOX_X + TFT_MODE_LABEL_OFFSET_X, TFT_MODE_BOX_BLE_Y + TFT_MODE_LABEL_OFFSET_Y,
+                "BLE", TFT_MODE_TEXT_SCALE, TFT_TITLE_TEXT);
+    draw_string(TFT_MODE_BOX_X + TFT_MODE_LABEL_OFFSET_X, TFT_MODE_BOX_LORA_Y + TFT_MODE_LABEL_OFFSET_Y,
+                "LORA", TFT_MODE_TEXT_SCALE, TFT_TITLE_TEXT);
+}
+
+int tft_mode_select_hit_test(int x, int y) {
+    if (x < TFT_MODE_BOX_X || x >= TFT_MODE_BOX_X + TFT_MODE_BOX_W) return -1;
+
+    if (y >= TFT_MODE_BOX_WIFI_Y && y < TFT_MODE_BOX_WIFI_Y + TFT_MODE_BOX_H) return 0;
+    if (y >= TFT_MODE_BOX_BLE_Y && y < TFT_MODE_BOX_BLE_Y + TFT_MODE_BOX_H) return 1;
+    if (y >= TFT_MODE_BOX_LORA_Y && y < TFT_MODE_BOX_LORA_Y + TFT_MODE_BOX_H) return 2;
+    return -1;
+}
+
+void tft_show_wifi_select(const char *ssid, int sample_count) {
+    tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
+
+    tft_fill_rect(TFT_WIFI_OUTER_X, TFT_WIFI_OUTER_Y, TFT_WIFI_OUTER_W, TFT_WIFI_OUTER_H, TFT_WIFI_DATA_BOX);
+
+    tft_fill_rect(TFT_WIFI_HEADER_X, TFT_WIFI_HEADER_Y, TFT_WIFI_HEADER_W, TFT_WIFI_HEADER_H, TFT_TITLE_BOX);
+    char line[32];
+    snprintf(line, sizeof(line), "SAMPLES:%d (DEFAULT)", sample_count);
+    draw_string(TFT_WIFI_HEADER_LINE1_X, TFT_WIFI_HEADER_LINE1_Y, line, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    snprintf(line, sizeof(line), "SSID:%s", ssid);
+    draw_string(TFT_WIFI_HEADER_LINE2_X, TFT_WIFI_HEADER_LINE2_Y, line, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_DETAIL_BTN_X, TFT_WIFI_DETAIL_BTN_Y, TFT_WIFI_DETAIL_BTN_W, TFT_WIFI_DETAIL_BTN_H,
+                         TFT_WIFI_DETAIL_BTN_R, TFT_WELCOME_BOX);
+    draw_string(TFT_WIFI_DETAIL_BTN_X + 4, TFT_WIFI_DETAIL_BTN_Y + 4, "DETAIL:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
+                "RSSI: ....", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_AVG_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_AVG_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "AVG RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MAX_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MAX_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "MAX RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MIN_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MIN_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "MIN RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+}
+
+void tft_update_wifi_stats(int rssi, int avg_rssi, int max_rssi, int min_rssi) {
+    char buf[32];
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "RSSI: %d", rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_AVG_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "AVG RSSI: %d", avg_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_AVG_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MAX_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "MAX RSSI: %d", max_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MAX_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MIN_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "MIN RSSI: %d", min_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MIN_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 }
 
 void tft_show_message(const char *msg) {
     tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BLACK);
 
-    const int scale = 2;
-    int char_width = (5 + 1) * scale;
+    int char_width = (5 + 1) * TFT_MESSAGE_TEXT_SCALE;
     int text_width = (int)strlen(msg) * char_width;
     int x = (TFT_WIDTH - text_width) / 2;
-    int y = (TFT_HEIGHT - 7 * scale) / 2;
+    int y = (TFT_HEIGHT - 7 * TFT_MESSAGE_TEXT_SCALE) / 2;
 
-    draw_string(x, y, msg, scale, TFT_WHITE);
+    draw_string(x, y, msg, TFT_MESSAGE_TEXT_SCALE, TFT_WHITE);
 }

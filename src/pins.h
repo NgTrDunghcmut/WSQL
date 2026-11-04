@@ -14,8 +14,12 @@
 #define SPI_MISO_PIN 22
 
 // ---- TFT control lines (CS is passed to the SPI driver, not toggled manually) ----
-#define TFT_CS_PIN  23
+#define TFT_CS_PIN  23                                                                                                          
 #define TFT_DC_PIN  19
 #define TFT_RST_PIN 21
+
+// ---- XPT2046 touch controller (shares SCK/MOSI/MISO with the TFT's SPI bus) ----
+#define TOUCH_CS_PIN  32
+#define TOUCH_IRQ_PIN 35
 
 #endif

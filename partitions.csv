@@ -1,0 +1,7 @@
+# Name,   Type, SubType, Offset,  Size, Flags
+# Grown from the default single-app table's 1MB factory partition to
+# 1.5MB, since the BLE/NimBLE stack pushed the app past 1MB. The chip
+# has 2MB total; this table uses ~1.6MB, leaving ~400KB spare.
+nvs,      data, nvs,     0x9000,  0x6000,
+phy_init, data, phy,     0xf000,  0x1000,
+factory,  app,  factory, 0x10000, 0x180000,

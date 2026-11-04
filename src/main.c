@@ -14,12 +14,16 @@
 #include "spi_bus.h"
 #include "tft.h"
 #include "touch.h"
+#include "lora.h"
+#include "ble_scan.h"
 
 #define SSID "KingSlayer"
 #define PASS "24012001"
 #define GATEWAY_IP "8.8.8.8"
 #define SAMPLE_COUNT 20
 #define SAMPLE_INTERVAL_MS 1000
+#define LORA_FREQUENCY_HZ 433000000L
+#define BLE_TARGET_NAME "MyPhone" // edit to match your target device's advertised name
 
 // Non-blocking: true if a touch landed on the back button just now.
 static bool back_button_tapped(void) {
@@ -122,6 +126,108 @@ static void run_wifi_mode(void) {
     wait_for_back_button();
 }
 
+// Beacon receiver: listens continuously, reporting RSSI/SNR of every
+// received packet plus running AVG/MAX/MIN RSSI, until the back button
+// is tapped.
+static void run_lora_mode(void) {
+    printf("Initializing LoRa radio...\n");
+    if (!lora_init()) {
+        printf("LoRa radio not found (check wiring)\n");
+        tft_show_message("LORA INIT FAILED");
+        tft_draw_back_button();
+        wait_for_back_button();
+        return;
+    }
+
+    lora_set_frequency(LORA_FREQUENCY_HZ);
+    lora_set_bandwidth(7);        // 125 kHz
+    lora_set_coding_rate(1);      // 4/5
+    lora_set_spreading_factor(7);
+    lora_enable_crc();
+    lora_receive();
+
+    printf("LoRa receiver listening at %ld Hz\n", LORA_FREQUENCY_HZ);
+    tft_show_lora_screen(LORA_FREQUENCY_HZ);
+    tft_draw_back_button();
+
+    long rssi_sum = 0;
+    int rssi_count = 0;
+    int rssi_max = INT_MIN;
+    int rssi_min = INT_MAX;
+    int packet_count = 0;
+
+    while (1) {
+        if (back_button_tapped()) {
+            printf("Returning to main menu\n");
+            return;
+        }
+
+        if (lora_received()) {
+            uint8_t buf[256];
+            int len = lora_receive_packet(buf, sizeof(buf) - 1);
+            buf[len] = '\0';
+
+            int rssi = lora_packet_rssi();
+            float snr = lora_packet_snr();
+            packet_count++;
+
+            rssi_sum += rssi;
+            rssi_count++;
+            if (rssi > rssi_max) rssi_max = rssi;
+            if (rssi < rssi_min) rssi_min = rssi;
+            int rssi_avg = (int)(rssi_sum / rssi_count);
+
+            int snr_tenths = (int)(snr * 10.0f);
+            bool snr_negative = snr_tenths < 0;
+            if (snr_negative) snr_tenths = -snr_tenths;
+            printf("LoRa packet #%d: \"%s\" RSSI=%d SNR=%s%d.%d\n",
+                   packet_count, (char *)buf, rssi,
+                   snr_negative ? "-" : "", snr_tenths / 10, snr_tenths % 10);
+            tft_update_lora_stats(rssi, snr, packet_count, rssi_avg, rssi_max, rssi_min);
+
+            lora_receive(); // resume listening after reading the packet
+        }
+
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
+}
+
+// Scans for the target device's advertisements, reporting RSSI plus
+// running AVG/MAX/MIN, until the back button is tapped.
+static void run_ble_mode(void) {
+    printf("Starting BLE scan for \"%s\"...\n", BLE_TARGET_NAME);
+    ble_scan_init(BLE_TARGET_NAME);
+
+    tft_show_ble_screen(BLE_TARGET_NAME);
+    tft_draw_back_button();
+
+    long rssi_sum = 0;
+    int rssi_count = 0;
+    int rssi_max = INT_MIN;
+    int rssi_min = INT_MAX;
+
+    while (1) {
+        if (back_button_tapped()) {
+            printf("Returning to main menu\n");
+            return;
+        }
+
+        int rssi;
+        bool found = ble_scan_get_rssi(&rssi);
+        if (found) {
+            rssi_sum += rssi;
+            rssi_count++;
+            if (rssi > rssi_max) rssi_max = rssi;
+            if (rssi < rssi_min) rssi_min = rssi;
+        }
+        int rssi_avg = (rssi_count > 0) ? (int)(rssi_sum / rssi_count) : 0;
+        tft_update_ble_stats(found, found ? rssi : 0,
+                              rssi_avg, rssi_count > 0 ? rssi_max : 0, rssi_count > 0 ? rssi_min : 0);
+
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+    }
+}
+
 void app_main() {
     printf("=== Wireless Signal Quality Logger ===\n");
 
@@ -141,11 +247,10 @@ void app_main() {
 
         if (mode == 0) {
             run_wifi_mode();
-        } else {
-            printf("Selected mode not implemented yet\n");
-            tft_show_message("DEVELOPING");
-            tft_draw_back_button();
-            wait_for_back_button();
+        } else if (mode == 1) {
+            run_ble_mode();
+        } else if (mode == 2) {
+            run_lora_mode();
         }
     }
 }

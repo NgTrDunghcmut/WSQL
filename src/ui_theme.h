@@ -69,8 +69,11 @@
 #define TFT_TITLE_TEXT_X 29
 #define TFT_TITLE_TEXT_Y 9
 
-// WiFi-select screen layout (matches the DisplayKit reference, 240x320)
+// Stat-screen layout (matches the DisplayKit reference, 240x320) - shared
+// by both the WiFi-select and LoRa-receiver screens, since they're the
+// same "outer box + header + 1 big box + 3 small boxes" shape.
 #define TFT_WIFI_TEXT_SCALE 1
+#define TFT_LORA_LINE_SPACING 12 // vertical gap between lines inside the big box
 
 #define TFT_WIFI_OUTER_X 10
 #define TFT_WIFI_OUTER_Y 48

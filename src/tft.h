@@ -35,6 +35,22 @@ void tft_show_wifi_select(const char *ssid, int sample_count);
 // tft_show_wifi_select() has drawn the rest of the screen.
 void tft_update_wifi_stats(int rssi, int avg_rssi, int max_rssi, int min_rssi);
 
+// Shows the LoRa-receiver screen: frequency header, and RSSI/SNR/packet
+// count/AVG/MAX/MIN RSSI boxes (shown as placeholders initially).
+void tft_show_lora_screen(long frequency_hz);
+
+// Redraws the LoRa stat boxes with live values. Call once per received
+// packet after tft_show_lora_screen() has drawn the rest of the screen.
+void tft_update_lora_stats(int rssi, float snr, int packet_count, int avg_rssi, int max_rssi, int min_rssi);
+
+// Shows the BLE-scanner screen: target-name header, and STATUS/RSSI/
+// AVG/MAX/MIN RSSI boxes (shown as placeholders initially).
+void tft_show_ble_screen(const char *target_name);
+
+// Redraws the BLE stat boxes with live values. Call once per scan tick
+// after tft_show_ble_screen() has drawn the rest of the screen.
+void tft_update_ble_stats(bool found, int rssi, int avg_rssi, int max_rssi, int min_rssi);
+
 // Clears the screen and shows a single centered status message
 // (e.g. "WIFI NOT CONNECTED"). Only characters in font.c render;
 // anything else shows as a blank space.

@@ -346,6 +346,146 @@ void tft_update_wifi_stats(int rssi, int avg_rssi, int max_rssi, int min_rssi) {
                 buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 }
 
+void tft_show_lora_screen(long frequency_hz) {
+    tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
+
+    tft_fill_rect(TFT_WIFI_OUTER_X, TFT_WIFI_OUTER_Y, TFT_WIFI_OUTER_W, TFT_WIFI_OUTER_H, TFT_WIFI_DATA_BOX);
+
+    tft_fill_rect(TFT_WIFI_HEADER_X, TFT_WIFI_HEADER_Y, TFT_WIFI_HEADER_W, TFT_WIFI_HEADER_H, TFT_TITLE_BOX);
+    draw_string(TFT_WIFI_HEADER_LINE1_X, TFT_WIFI_HEADER_LINE1_Y, "LORA RECEIVER", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    char line[32];
+    snprintf(line, sizeof(line), "FREQ:%ldMHZ", frequency_hz / 1000000);
+    draw_string(TFT_WIFI_HEADER_LINE2_X, TFT_WIFI_HEADER_LINE2_Y, line, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
+                "RSSI: ....", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + TFT_LORA_LINE_SPACING,
+                "SNR: ....", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + 2 * TFT_LORA_LINE_SPACING,
+                "PACKETS: 0", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_AVG_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_AVG_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "AVG RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MAX_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MAX_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "MAX RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MIN_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MIN_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "MIN RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+}
+
+void tft_update_lora_stats(int rssi, float snr, int packet_count, int avg_rssi, int max_rssi, int min_rssi) {
+    char buf[32];
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "RSSI: %d", rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    // Format SNR as signed tenths manually - avoid relying on printf's
+    // %f, which ESP-IDF's "nano" newlib formatting may not support.
+    int snr_tenths = (int)(snr * 10.0f);
+    bool snr_negative = snr_tenths < 0;
+    if (snr_negative) snr_tenths = -snr_tenths;
+    snprintf(buf, sizeof(buf), "SNR: %s%d.%d", snr_negative ? "-" : "", snr_tenths / 10, snr_tenths % 10);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + TFT_LORA_LINE_SPACING,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    snprintf(buf, sizeof(buf), "PACKETS: %d", packet_count);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + 2 * TFT_LORA_LINE_SPACING,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_AVG_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "AVG RSSI: %d", avg_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_AVG_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MAX_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "MAX RSSI: %d", max_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MAX_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MIN_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "MIN RSSI: %d", min_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MIN_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+}
+
+void tft_show_ble_screen(const char *target_name) {
+    tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
+
+    tft_fill_rect(TFT_WIFI_OUTER_X, TFT_WIFI_OUTER_Y, TFT_WIFI_OUTER_W, TFT_WIFI_OUTER_H, TFT_WIFI_DATA_BOX);
+
+    tft_fill_rect(TFT_WIFI_HEADER_X, TFT_WIFI_HEADER_Y, TFT_WIFI_HEADER_W, TFT_WIFI_HEADER_H, TFT_TITLE_BOX);
+    draw_string(TFT_WIFI_HEADER_LINE1_X, TFT_WIFI_HEADER_LINE1_Y, "BLE SCANNER", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    char line[32];
+    snprintf(line, sizeof(line), "TARGET:%s", target_name);
+    draw_string(TFT_WIFI_HEADER_LINE2_X, TFT_WIFI_HEADER_LINE2_Y, line, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
+                "STATUS: ....", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + TFT_LORA_LINE_SPACING,
+                "RSSI: ....", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_AVG_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_AVG_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "AVG RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MAX_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MAX_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "MAX RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MIN_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MIN_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                "MIN RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+}
+
+void tft_update_ble_stats(bool found, int rssi, int avg_rssi, int max_rssi, int min_rssi) {
+    char buf[32];
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "STATUS: %s", found ? "FOUND" : "LOST");
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    snprintf(buf, sizeof(buf), "RSSI: %d", rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + TFT_LORA_LINE_SPACING,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_AVG_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "AVG RSSI: %d", avg_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_AVG_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MAX_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "MAX RSSI: %d", max_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MAX_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+
+    tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_MIN_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
+                         TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
+    snprintf(buf, sizeof(buf), "MIN RSSI: %d", min_rssi);
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_STAT_TEXT_OFF_X, TFT_WIFI_MIN_BOX_Y + TFT_WIFI_STAT_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+}
+
 void tft_show_message(const char *msg) {
     tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BLACK);
 

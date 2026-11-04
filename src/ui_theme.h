@@ -107,4 +107,14 @@
 #define TFT_WIFI_STAT_TEXT_OFF_X 8
 #define TFT_WIFI_STAT_TEXT_OFF_Y 4
 
+// "Back to menu" button - shown on every mode screen (WiFi, BLE, LoRa)
+#define TFT_BACK_BTN_X 70
+#define TFT_BACK_BTN_Y 292
+#define TFT_BACK_BTN_W 100
+#define TFT_BACK_BTN_H 24
+#define TFT_BACK_BTN_R 4
+#define TFT_BACK_BTN_COLOR TFT_WELCOME_BOX
+#define TFT_BACK_BTN_TEXT  TFT_TITLE_TEXT
+#define TFT_BACK_BTN_TEXT_SCALE 1
+
 #endif

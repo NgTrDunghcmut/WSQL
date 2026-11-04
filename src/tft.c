@@ -98,23 +98,6 @@ static void tft_fill_rect(int x, int y, int w, int h, uint16_t color) {
     }
 }
 
-void tft_draw_rgb565_image(const uint16_t *pixels, int width, int height) {
-    if (width > TFT_WIDTH) width = TFT_WIDTH;
-    if (height > TFT_HEIGHT) height = TFT_HEIGHT;
-
-    tft_set_addr_window(0, 0, width - 1, height - 1);
-
-    uint8_t row_buf[TFT_WIDTH * 2];
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            uint16_t color = pixels[y * width + x];
-            row_buf[x * 2] = color >> 8;
-            row_buf[x * 2 + 1] = color & 0xFF;
-        }
-        tft_write_data(row_buf, (size_t)width * 2);
-    }
-}
-
 static void tft_fill_circle(int cx, int cy, int r, uint16_t color) {
     for (int dy = -r; dy <= r; dy++) {
         int dx = (int)(sqrtf((float)(r * r - dy * dy)) + 0.5f);
@@ -372,4 +355,20 @@ void tft_show_message(const char *msg) {
     int y = (TFT_HEIGHT - 7 * TFT_MESSAGE_TEXT_SCALE) / 2;
 
     draw_string(x, y, msg, TFT_MESSAGE_TEXT_SCALE, TFT_WHITE);
+}
+
+void tft_draw_back_button(void) {
+    tft_fill_round_rect(TFT_BACK_BTN_X, TFT_BACK_BTN_Y, TFT_BACK_BTN_W, TFT_BACK_BTN_H,
+                         TFT_BACK_BTN_R, TFT_BACK_BTN_COLOR);
+
+    const char *label = "MENU";
+    int text_width = (int)strlen(label) * (5 + 1) * TFT_BACK_BTN_TEXT_SCALE;
+    int x = TFT_BACK_BTN_X + (TFT_BACK_BTN_W - text_width) / 2;
+    int y = TFT_BACK_BTN_Y + (TFT_BACK_BTN_H - 7 * TFT_BACK_BTN_TEXT_SCALE) / 2;
+    draw_string(x, y, label, TFT_BACK_BTN_TEXT_SCALE, TFT_BACK_BTN_TEXT);
+}
+
+bool tft_back_button_hit_test(int x, int y) {
+    return x >= TFT_BACK_BTN_X && x < TFT_BACK_BTN_X + TFT_BACK_BTN_W &&
+           y >= TFT_BACK_BTN_Y && y < TFT_BACK_BTN_Y + TFT_BACK_BTN_H;
 }

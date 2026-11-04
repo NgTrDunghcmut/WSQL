@@ -2,6 +2,7 @@
 #define TFT_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 // Initializes the ILI9341 TFT over SPI (240x320 portrait).
 // Call spi_bus_init() first.
@@ -39,8 +40,12 @@ void tft_update_wifi_stats(int rssi, int avg_rssi, int max_rssi, int min_rssi);
 // anything else shows as a blank space.
 void tft_show_message(const char *msg);
 
-// Draws a full RGB565 image (row-major, one uint16_t per pixel) at the
-// top-left of the screen, clipped to the screen's own dimensions.
-void tft_draw_rgb565_image(const uint16_t *pixels, int width, int height);
+// Draws a small "MENU" button, shown on every mode screen so the user
+// can return to mode-select. Caller is responsible for checking taps
+// against it via tft_back_button_hit_test().
+void tft_draw_back_button(void);
+
+// True if the given touch point falls on the back button.
+bool tft_back_button_hit_test(int x, int y);
 
 #endif

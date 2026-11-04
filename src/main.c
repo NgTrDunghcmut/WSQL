@@ -14,7 +14,6 @@
 #include "spi_bus.h"
 #include "tft.h"
 #include "touch.h"
-#include "workingonit.h"
 
 #define SSID "KingSlayer"
 #define PASS "24012001"
@@ -22,9 +21,17 @@
 #define SAMPLE_COUNT 20
 #define SAMPLE_INTERVAL_MS 1000
 
-static void standby_forever(void) {
-    while (1) {
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+// Non-blocking: true if a touch landed on the back button just now.
+static bool back_button_tapped(void) {
+    int sx, sy;
+    if (!touch_read_screen_xy(&sx, &sy)) return false;
+    return tft_back_button_hit_test(sx, sy);
+}
+
+// Blocks until the back button is tapped.
+static void wait_for_back_button(void) {
+    while (!back_button_tapped()) {
+        vTaskDelay(50 / portTICK_PERIOD_MS);
     }
 }
 
@@ -63,12 +70,15 @@ static void run_wifi_mode(void) {
     if (!wifi_is_connected()) {
         printf("Failed to connect to WiFi\n");
         tft_show_message("WIFI NOT CONNECTED");
-        standby_forever();
+        tft_draw_back_button();
+        wait_for_back_button();
+        return;
     }
 
     printf("WiFi connected, RSSI: %d dBm\n", wifi_get_rssi());
     timesync_init(10000);
     tft_show_wifi_select(SSID, SAMPLE_COUNT);
+    tft_draw_back_button();
 
     long rssi_sum = 0;
     int rssi_count = 0;
@@ -78,6 +88,11 @@ static void run_wifi_mode(void) {
     // Sample RSSI + ping latency/loss once per second, printing each
     // as a JSON line (stands in for an MQTT publish for now).
     for (int i = 0; i < SAMPLE_COUNT; i++) {
+        if (back_button_tapped()) {
+            printf("Returning to main menu\n");
+            return;
+        }
+
         int64_t start_us = esp_timer_get_time();
 
         int rtt_ms = 0;
@@ -104,7 +119,7 @@ static void run_wifi_mode(void) {
     }
 
     printf("Logging complete\n");
-    standby_forever();
+    wait_for_back_button();
 }
 
 void app_main() {
@@ -120,14 +135,17 @@ void app_main() {
     tft_show_welcome();
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 
-    tft_show_mode_select();
-    int mode = wait_for_mode_selection();
+    while (1) {
+        tft_show_mode_select();
+        int mode = wait_for_mode_selection();
 
-    if (mode == 0) {
-        run_wifi_mode();
-    } else {
-        printf("Selected mode not implemented yet\n");
-        tft_draw_rgb565_image(sprite, sprite_width, sprite_height);
-        standby_forever();
+        if (mode == 0) {
+            run_wifi_mode();
+        } else {
+            printf("Selected mode not implemented yet\n");
+            tft_show_message("DEVELOPING");
+            tft_draw_back_button();
+            wait_for_back_button();
+        }
     }
 }

@@ -51,6 +51,14 @@ void tft_show_ble_screen(const char *target_name);
 // after tft_show_ble_screen() has drawn the rest of the screen.
 void tft_update_ble_stats(bool found, int rssi, int avg_rssi, int max_rssi, int min_rssi);
 
+// Shows a list of up to TFT_LIST_MAX_ROWS tappable rows, one per string
+// in `lines` (e.g. "NAME RSSI:-70"). Pass count=0 to show "SCANNING....".
+void tft_show_ble_scan_list(const char *const *lines, int count);
+
+// Given a touch point, returns which row index it falls in (0..count-1),
+// or -1 if outside all rows.
+int tft_ble_scan_list_hit_test(int x, int y, int count);
+
 // Clears the screen and shows a single centered status message
 // (e.g. "WIFI NOT CONNECTED"). Only characters in font.c render;
 // anything else shows as a blank space.

@@ -16,6 +16,7 @@
 #include "touch.h"
 #include "lora.h"
 #include "ble_scan.h"
+#include "pins.h"
 
 #define SSID "KingSlayer"
 #define PASS "24012001"
@@ -23,7 +24,6 @@
 #define SAMPLE_COUNT 20
 #define SAMPLE_INTERVAL_MS 1000
 #define LORA_FREQUENCY_HZ 433000000L
-#define BLE_TARGET_NAME "MyPhone" // edit to match your target device's advertised name
 
 // Non-blocking: true if a touch landed on the back button just now.
 static bool back_button_tapped(void) {
@@ -192,13 +192,57 @@ static void run_lora_mode(void) {
     }
 }
 
-// Scans for the target device's advertisements, reporting RSSI plus
-// running AVG/MAX/MIN, until the back button is tapped.
-static void run_ble_mode(void) {
-    printf("Starting BLE scan for \"%s\"...\n", BLE_TARGET_NAME);
-    ble_scan_init(BLE_TARGET_NAME);
+// Shows the live-updating scan-result list and blocks until the user
+// taps a device row (returns its index) or the back button (-1).
+static int wait_for_ble_device_selection(void) {
+    while (1) {
+        int count = ble_scan_get_device_count();
+        char labels[BLE_SCAN_MAX_DEVICES][40];
+        const char *label_ptrs[BLE_SCAN_MAX_DEVICES];
+        for (int i = 0; i < count; i++) {
+            ble_scan_get_device_label(i, labels[i], sizeof(labels[i]));
+            label_ptrs[i] = labels[i];
+        }
+        tft_show_ble_scan_list(label_ptrs, count);
+        tft_draw_back_button();
 
-    tft_show_ble_screen(BLE_TARGET_NAME);
+        // Re-draw the list roughly once a second so RSSI values and
+        // newly-discovered devices stay current while waiting for a tap.
+        int64_t refresh_until = esp_timer_get_time() + 1000000;
+        while (esp_timer_get_time() < refresh_until) {
+            if (back_button_tapped()) return -1;
+
+            int sx, sy;
+            if (touch_read_screen_xy(&sx, &sy)) {
+                int hit = tft_ble_scan_list_hit_test(sx, sy, count);
+                if (hit >= 0) return hit;
+                vTaskDelay(300 / portTICK_PERIOD_MS);
+            } else {
+                vTaskDelay(20 / portTICK_PERIOD_MS);
+            }
+        }
+    }
+}
+
+// Scans for nearby BLE devices, lets the user pick one from a live list,
+// then tracks that device's RSSI (plus running AVG/MAX/MIN) until the
+// back button is tapped.
+static void run_ble_mode(void) {
+    printf("Starting BLE scan...\n");
+    ble_scan_init();
+
+    int selected = wait_for_ble_device_selection();
+    if (selected < 0) {
+        printf("Returning to main menu\n");
+        return;
+    }
+
+    char target_name[32];
+    ble_scan_get_device_name(selected, target_name, sizeof(target_name));
+    ble_scan_select_device(selected);
+    printf("Tracking BLE device: %s\n", target_name);
+
+    tft_show_ble_screen(target_name);
     tft_draw_back_button();
 
     long rssi_sum = 0;

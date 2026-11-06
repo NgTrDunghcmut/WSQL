@@ -120,4 +120,20 @@
 #define TFT_BACK_BTN_TEXT  TFT_TITLE_TEXT
 #define TFT_BACK_BTN_TEXT_SCALE 1
 
+// BLE scan-result list screen - a vertical list of tappable rows, one
+// per discovered device.
+#define TFT_LIST_MAX_ROWS 5
+#define TFT_LIST_TITLE_X 16
+#define TFT_LIST_TITLE_Y 16
+#define TFT_LIST_TITLE_SCALE 1
+#define TFT_LIST_ROW_X 21
+#define TFT_LIST_ROW_W 198
+#define TFT_LIST_ROW_H 32
+#define TFT_LIST_ROW_GAP 8
+#define TFT_LIST_ROW_START_Y 50
+#define TFT_LIST_ROW_COLOR TFT_MODE_BOX_COLOR
+#define TFT_LIST_LABEL_OFFSET_X 8
+#define TFT_LIST_LABEL_OFFSET_Y 10
+#define TFT_LIST_TEXT_SCALE 1
+
 #endif

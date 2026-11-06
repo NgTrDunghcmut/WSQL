@@ -486,6 +486,39 @@ void tft_update_ble_stats(bool found, int rssi, int avg_rssi, int max_rssi, int 
                 buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 }
 
+static int ble_scan_list_row_y(int row) {
+    return TFT_LIST_ROW_START_Y + row * (TFT_LIST_ROW_H + TFT_LIST_ROW_GAP);
+}
+
+void tft_show_ble_scan_list(const char *const *lines, int count) {
+    tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
+    draw_string(TFT_LIST_TITLE_X, TFT_LIST_TITLE_Y, "SELECT BLE DEVICE", TFT_LIST_TITLE_SCALE, TFT_WHITE);
+
+    if (count <= 0) {
+        draw_string(TFT_LIST_ROW_X, TFT_LIST_ROW_START_Y, "SCANNING....", TFT_LIST_TEXT_SCALE, TFT_WHITE);
+        return;
+    }
+    if (count > TFT_LIST_MAX_ROWS) count = TFT_LIST_MAX_ROWS;
+
+    for (int i = 0; i < count; i++) {
+        int y = ble_scan_list_row_y(i);
+        tft_fill_rect(TFT_LIST_ROW_X, y, TFT_LIST_ROW_W, TFT_LIST_ROW_H, TFT_LIST_ROW_COLOR);
+        draw_string(TFT_LIST_ROW_X + TFT_LIST_LABEL_OFFSET_X, y + TFT_LIST_LABEL_OFFSET_Y,
+                    lines[i], TFT_LIST_TEXT_SCALE, TFT_TITLE_TEXT);
+    }
+}
+
+int tft_ble_scan_list_hit_test(int x, int y, int count) {
+    if (x < TFT_LIST_ROW_X || x >= TFT_LIST_ROW_X + TFT_LIST_ROW_W) return -1;
+    if (count > TFT_LIST_MAX_ROWS) count = TFT_LIST_MAX_ROWS;
+
+    for (int i = 0; i < count; i++) {
+        int row_y = ble_scan_list_row_y(i);
+        if (y >= row_y && y < row_y + TFT_LIST_ROW_H) return i;
+    }
+    return -1;
+}
+
 void tft_show_message(const char *msg) {
     tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BLACK);
 

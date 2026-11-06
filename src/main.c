@@ -16,7 +16,6 @@
 #include "touch.h"
 #include "lora.h"
 #include "ble_scan.h"
-#include "pins.h"
 
 #define SSID "KingSlayer"
 #define PASS "24012001"
@@ -192,22 +191,23 @@ static void run_lora_mode(void) {
     }
 }
 
-// Shows the live-updating scan-result list and blocks until the user
-// taps a device row (returns its index) or the back button (-1).
+// Shows the live-updating scan-result list (named devices only) and
+// blocks until the user taps a device row (returns its index) or the
+// back button (-1).
 static int wait_for_ble_device_selection(void) {
     while (1) {
         int count = ble_scan_get_device_count();
-        char labels[BLE_SCAN_MAX_DEVICES][40];
+        char labels[BLE_SCAN_MAX_DEVICES][BLE_SCAN_NAME_LEN];
         const char *label_ptrs[BLE_SCAN_MAX_DEVICES];
         for (int i = 0; i < count; i++) {
-            ble_scan_get_device_label(i, labels[i], sizeof(labels[i]));
+            ble_scan_get_device_name(i, labels[i], sizeof(labels[i]));
             label_ptrs[i] = labels[i];
         }
         tft_show_ble_scan_list(label_ptrs, count);
         tft_draw_back_button();
 
-        // Re-draw the list roughly once a second so RSSI values and
-        // newly-discovered devices stay current while waiting for a tap.
+        // Re-draw the list roughly once a second so newly-discovered
+        // devices show up while waiting for a tap.
         int64_t refresh_until = esp_timer_get_time() + 1000000;
         while (esp_timer_get_time() < refresh_until) {
             if (back_button_tapped()) return -1;
@@ -224,9 +224,22 @@ static int wait_for_ble_device_selection(void) {
     }
 }
 
-// Scans for nearby BLE devices, lets the user pick one from a live list,
-// then tracks that device's RSSI (plus running AVG/MAX/MIN) until the
-// back button is tapped.
+// Blocks until the pending connect attempt resolves, or the back
+// button is tapped (which aborts by just returning - the connect
+// attempt may still complete in the background, in which case the
+// next ble_scan_init() restarts discovery and drops it).
+static ble_connect_result_t wait_for_ble_connect(void) {
+    ble_connect_result_t result;
+    while ((result = ble_scan_get_connect_result()) == BLE_CONNECT_PENDING) {
+        if (back_button_tapped()) return BLE_CONNECT_NONE;
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+    }
+    return result;
+}
+
+// Scans for nearby named BLE devices, lets the user pick one from a
+// live list, connects to it, then tracks the connection's live RSSI
+// (plus running AVG/MAX/MIN) until the back button is tapped.
 static void run_ble_mode(void) {
     printf("Starting BLE scan...\n");
     ble_scan_init();
@@ -237,11 +250,27 @@ static void run_ble_mode(void) {
         return;
     }
 
-    char target_name[32];
+    char target_name[BLE_SCAN_NAME_LEN];
     ble_scan_get_device_name(selected, target_name, sizeof(target_name));
-    ble_scan_select_device(selected);
-    printf("Tracking BLE device: %s\n", target_name);
 
+    printf("Connecting to %s...\n", target_name);
+    tft_show_message("CONNECTING....");
+    ble_scan_connect_device(selected);
+
+    ble_connect_result_t result = wait_for_ble_connect();
+    if (result == BLE_CONNECT_NONE) {
+        printf("Returning to main menu\n");
+        return;
+    }
+    if (result != BLE_CONNECT_SUCCESS) {
+        printf("Failed to connect to %s\n", target_name);
+        tft_show_message("CONNECT FAILED");
+        tft_draw_back_button();
+        wait_for_back_button();
+        return;
+    }
+
+    printf("Connected to %s\n", target_name);
     tft_show_ble_screen(target_name);
     tft_draw_back_button();
 
@@ -253,6 +282,7 @@ static void run_ble_mode(void) {
     while (1) {
         if (back_button_tapped()) {
             printf("Returning to main menu\n");
+            ble_scan_disconnect();
             return;
         }
 

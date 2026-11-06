@@ -14,15 +14,15 @@
 #include "spi_bus.h"
 #include "tft.h"
 #include "touch.h"
-#include "lora.h"
+#include "ra01s.h"
 #include "ble_scan.h"
 
 #define SSID "KingSlayer"
 #define PASS "24012001"
 #define GATEWAY_IP "8.8.8.8"
-#define SAMPLE_COUNT 20
 #define SAMPLE_INTERVAL_MS 1000
 #define LORA_FREQUENCY_HZ 433000000L
+#define LORA_TX_POWER_DBM 22 // SX1262 max; different envelope than the old SX1276 (-3..+22 dBm)
 
 // Non-blocking: true if a touch landed on the back button just now.
 static bool back_button_tapped(void) {
@@ -80,7 +80,7 @@ static void run_wifi_mode(void) {
 
     printf("WiFi connected, RSSI: %d dBm\n", wifi_get_rssi());
     timesync_init(10000);
-    tft_show_wifi_select(SSID, SAMPLE_COUNT);
+    tft_show_wifi_select(SSID);
     tft_draw_back_button();
 
     long rssi_sum = 0;
@@ -89,8 +89,9 @@ static void run_wifi_mode(void) {
     int rssi_min = INT_MAX;
 
     // Sample RSSI + ping latency/loss once per second, printing each
-    // as a JSON line (stands in for an MQTT publish for now).
-    for (int i = 0; i < SAMPLE_COUNT; i++) {
+    // as a JSON line (stands in for an MQTT publish for now), until
+    // the back button is tapped.
+    while (1) {
         if (back_button_tapped()) {
             printf("Returning to main menu\n");
             return;
@@ -120,9 +121,6 @@ static void run_wifi_mode(void) {
             vTaskDelay(remaining_ms / portTICK_PERIOD_MS);
         }
     }
-
-    printf("Logging complete\n");
-    wait_for_back_button();
 }
 
 // Beacon receiver: listens continuously, reporting RSSI/SNR of every
@@ -130,7 +128,10 @@ static void run_wifi_mode(void) {
 // is tapped.
 static void run_lora_mode(void) {
     printf("Initializing LoRa radio...\n");
-    if (!lora_init()) {
+    LoRaInit();
+    // tcxoVoltage=0.0/useRegulatorLDO=false: plain-crystal SX1262 breakout
+    // (e.g. Ra-01S, no onboard TCXO) - matches the driver's own example.
+    if (LoRaBegin(LORA_FREQUENCY_HZ, LORA_TX_POWER_DBM, 0.0, false) != ERR_NONE) {
         printf("LoRa radio not found (check wiring)\n");
         tft_show_message("LORA INIT FAILED");
         tft_draw_back_button();
@@ -138,12 +139,12 @@ static void run_lora_mode(void) {
         return;
     }
 
-    lora_set_frequency(LORA_FREQUENCY_HZ);
-    lora_set_bandwidth(7);        // 125 kHz
-    lora_set_coding_rate(1);      // 4/5
-    lora_set_spreading_factor(7);
-    lora_enable_crc();
-    lora_receive();
+    // Arms continuous RX internally (SetRx with an infinite timeout) -
+    // no separate "start listening" call needed, and no re-arm needed
+    // between packets (the radio stays in Rx mode automatically).
+    LoRaConfig(7, SX126X_LORA_BW_125_0, SX126X_LORA_CR_4_5,
+               8 /* preamble symbols */, 0 /* variable length */,
+               true /* CRC on */, false /* standard IQ */);
 
     printf("LoRa receiver listening at %ld Hz\n", LORA_FREQUENCY_HZ);
     tft_show_lora_screen(LORA_FREQUENCY_HZ);
@@ -161,13 +162,13 @@ static void run_lora_mode(void) {
             return;
         }
 
-        if (lora_received()) {
-            uint8_t buf[256];
-            int len = lora_receive_packet(buf, sizeof(buf) - 1);
+        uint8_t buf[256];
+        uint8_t len = LoRaReceive(buf, sizeof(buf) - 1);
+        if (len > 0) {
             buf[len] = '\0';
 
-            int rssi = lora_packet_rssi();
-            float snr = lora_packet_snr();
+            int8_t rssi, snr;
+            GetPacketStatus(&rssi, &snr); // both plain integer dB/dBm now
             packet_count++;
 
             rssi_sum += rssi;
@@ -176,15 +177,9 @@ static void run_lora_mode(void) {
             if (rssi < rssi_min) rssi_min = rssi;
             int rssi_avg = (int)(rssi_sum / rssi_count);
 
-            int snr_tenths = (int)(snr * 10.0f);
-            bool snr_negative = snr_tenths < 0;
-            if (snr_negative) snr_tenths = -snr_tenths;
-            printf("LoRa packet #%d: \"%s\" RSSI=%d SNR=%s%d.%d\n",
-                   packet_count, (char *)buf, rssi,
-                   snr_negative ? "-" : "", snr_tenths / 10, snr_tenths % 10);
+            printf("LoRa packet #%d: \"%s\" RSSI=%d SNR=%d\n",
+                   packet_count, (char *)buf, rssi, snr);
             tft_update_lora_stats(rssi, snr, packet_count, rssi_avg, rssi_max, rssi_min);
-
-            lora_receive(); // resume listening after reading the packet
         }
 
         vTaskDelay(20 / portTICK_PERIOD_MS);

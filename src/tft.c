@@ -281,15 +281,14 @@ int tft_mode_select_hit_test(int x, int y) {
     return -1;
 }
 
-void tft_show_wifi_select(const char *ssid, int sample_count) {
+void tft_show_wifi_select(const char *ssid) {
     tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
 
     tft_fill_rect(TFT_WIFI_OUTER_X, TFT_WIFI_OUTER_Y, TFT_WIFI_OUTER_W, TFT_WIFI_OUTER_H, TFT_WIFI_DATA_BOX);
 
     tft_fill_rect(TFT_WIFI_HEADER_X, TFT_WIFI_HEADER_Y, TFT_WIFI_HEADER_W, TFT_WIFI_HEADER_H, TFT_TITLE_BOX);
     char line[32];
-    snprintf(line, sizeof(line), "SAMPLES:%d (DEFAULT)", sample_count);
-    draw_string(TFT_WIFI_HEADER_LINE1_X, TFT_WIFI_HEADER_LINE1_Y, line, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    draw_string(TFT_WIFI_HEADER_LINE1_X, TFT_WIFI_HEADER_LINE1_Y, "CONTINUOUS", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
     snprintf(line, sizeof(line), "SSID:%s", ssid);
     draw_string(TFT_WIFI_HEADER_LINE2_X, TFT_WIFI_HEADER_LINE2_Y, line, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 
@@ -382,7 +381,7 @@ void tft_show_lora_screen(long frequency_hz) {
                 "MIN RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 }
 
-void tft_update_lora_stats(int rssi, float snr, int packet_count, int avg_rssi, int max_rssi, int min_rssi) {
+void tft_update_lora_stats(int rssi, int snr, int packet_count, int avg_rssi, int max_rssi, int min_rssi) {
     char buf[32];
 
     tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
@@ -390,12 +389,7 @@ void tft_update_lora_stats(int rssi, float snr, int packet_count, int avg_rssi, 
     snprintf(buf, sizeof(buf), "RSSI: %d", rssi);
     draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
                 buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
-    // Format SNR as signed tenths manually - avoid relying on printf's
-    // %f, which ESP-IDF's "nano" newlib formatting may not support.
-    int snr_tenths = (int)(snr * 10.0f);
-    bool snr_negative = snr_tenths < 0;
-    if (snr_negative) snr_tenths = -snr_tenths;
-    snprintf(buf, sizeof(buf), "SNR: %s%d.%d", snr_negative ? "-" : "", snr_tenths / 10, snr_tenths % 10);
+    snprintf(buf, sizeof(buf), "SNR: %d", snr);
     draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + TFT_LORA_LINE_SPACING,
                 buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
     snprintf(buf, sizeof(buf), "PACKETS: %d", packet_count);

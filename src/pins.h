@@ -22,4 +22,8 @@
 #define TOUCH_CS_PIN  32
 #define TOUCH_IRQ_PIN 35
 
+// ---- Remote API endpoint ----
+// URL that api_post_send() POSTs sample data to. Fill in before use.
+#define API_POST_URL "http://example.com/api/samples"
+
 #endif

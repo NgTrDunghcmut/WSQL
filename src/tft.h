@@ -25,10 +25,11 @@ void tft_show_mode_select(void);
 // falls in: 0=WIFI, 1=BLE, 2=LORA, or -1 if outside all three.
 int tft_mode_select_hit_test(int x, int y);
 
-// Shows the WiFi-select screen: SSID/sample-count header, a Detail
-// button, and RSSI/AVG/MAX/MIN stat boxes (values shown as "...."
-// placeholders - not yet wired to live data).
-void tft_show_wifi_select(const char *ssid, int sample_count);
+// Shows the WiFi-select screen: SSID header (mode runs continuously
+// until the back button is tapped), a Detail button, and RSSI/AVG/
+// MAX/MIN stat boxes (values shown as "...." placeholders - not yet
+// wired to live data).
+void tft_show_wifi_select(const char *ssid);
 
 // Redraws just the RSSI/AVG/MAX/MIN stat boxes on the WiFi-select
 // screen with live values. Call once per sample after
@@ -41,7 +42,7 @@ void tft_show_lora_screen(long frequency_hz);
 
 // Redraws the LoRa stat boxes with live values. Call once per received
 // packet after tft_show_lora_screen() has drawn the rest of the screen.
-void tft_update_lora_stats(int rssi, float snr, int packet_count, int avg_rssi, int max_rssi, int min_rssi);
+void tft_update_lora_stats(int rssi, int snr, int packet_count, int avg_rssi, int max_rssi, int min_rssi);
 
 // Shows the BLE-scanner screen: target-name header, and STATUS/RSSI/
 // AVG/MAX/MIN RSSI boxes (shown as placeholders initially).

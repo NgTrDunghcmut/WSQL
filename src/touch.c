@@ -2,7 +2,7 @@
 #include "driver/spi_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
-#include "pins.h"
+#include "pins_stats.h"
 #include "touch.h"
 #include "ui_theme.h"
 

@@ -2,7 +2,7 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "api_post.h"
-#include "pins.h"
+#include "pins_stats.h"
 
 static const char *TAG = "APIPost";
 

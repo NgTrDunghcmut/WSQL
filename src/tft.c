@@ -11,7 +11,7 @@
 #include "font.h"
 #include "history.h"
 #include "tft.h"
-#include "pins.h"
+#include "pins_stats.h"
 #include "ui_theme.h"
 
 #define CHART_HEIGHT (TFT_HEIGHT - TFT_CHART_TOP)
@@ -317,13 +317,27 @@ void tft_show_wifi_select(const char *ssid) {
                 "MIN RSSI:", TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 }
 
-void tft_update_wifi_stats(int rssi, int avg_rssi, int max_rssi, int min_rssi) {
+void tft_update_wifi_stats(int rssi, int rtt_ms, int jitter_ms, bool lost, int avg_rssi, int max_rssi, int min_rssi) {
     char buf[32];
 
     tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_RSSI_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_RSSI_BOX_H,
                          TFT_WIFI_RSSI_BOX_R, TFT_WIFI_STAT_BOX);
     snprintf(buf, sizeof(buf), "RSSI: %d", rssi);
     draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    if (lost) {
+        snprintf(buf, sizeof(buf), "LATENCY: LOST");
+    } else {
+        snprintf(buf, sizeof(buf), "LATENCY: %dMS", rtt_ms);
+    }
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + TFT_LORA_LINE_SPACING,
+                buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
+    if (jitter_ms < 0) {
+        snprintf(buf, sizeof(buf), "JITTER: ....");
+    } else {
+        snprintf(buf, sizeof(buf), "JITTER: %dMS", jitter_ms);
+    }
+    draw_string(TFT_WIFI_RSSI_BOX_X + TFT_WIFI_RSSI_TEXT_OFF_X, TFT_WIFI_RSSI_BOX_Y + TFT_WIFI_RSSI_TEXT_OFF_Y + 2 * TFT_LORA_LINE_SPACING,
                 buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 
     tft_fill_round_rect(TFT_WIFI_RSSI_BOX_X, TFT_WIFI_AVG_BOX_Y, TFT_WIFI_RSSI_BOX_W, TFT_WIFI_STAT_BOX_H,
@@ -480,34 +494,34 @@ void tft_update_ble_stats(bool found, int rssi, int avg_rssi, int max_rssi, int 
                 buf, TFT_WIFI_TEXT_SCALE, TFT_TITLE_TEXT);
 }
 
-static int ble_scan_list_row_y(int row) {
+static int selection_list_row_y(int row) {
     return TFT_LIST_ROW_START_Y + row * (TFT_LIST_ROW_H + TFT_LIST_ROW_GAP);
 }
 
-void tft_show_ble_scan_list(const char *const *lines, int count) {
+void tft_show_selection_list(const char *title, const char *const *lines, int count, const char *empty_text) {
     tft_fill_rect(0, 0, TFT_WIDTH, TFT_HEIGHT, TFT_BG);
-    draw_string(TFT_LIST_TITLE_X, TFT_LIST_TITLE_Y, "SELECT BLE DEVICE", TFT_LIST_TITLE_SCALE, TFT_WHITE);
+    draw_string(TFT_LIST_TITLE_X, TFT_LIST_TITLE_Y, title, TFT_LIST_TITLE_SCALE, TFT_WHITE);
 
     if (count <= 0) {
-        draw_string(TFT_LIST_ROW_X, TFT_LIST_ROW_START_Y, "SCANNING....", TFT_LIST_TEXT_SCALE, TFT_WHITE);
+        draw_string(TFT_LIST_ROW_X, TFT_LIST_ROW_START_Y, empty_text, TFT_LIST_TEXT_SCALE, TFT_WHITE);
         return;
     }
     if (count > TFT_LIST_MAX_ROWS) count = TFT_LIST_MAX_ROWS;
 
     for (int i = 0; i < count; i++) {
-        int y = ble_scan_list_row_y(i);
+        int y = selection_list_row_y(i);
         tft_fill_rect(TFT_LIST_ROW_X, y, TFT_LIST_ROW_W, TFT_LIST_ROW_H, TFT_LIST_ROW_COLOR);
         draw_string(TFT_LIST_ROW_X + TFT_LIST_LABEL_OFFSET_X, y + TFT_LIST_LABEL_OFFSET_Y,
                     lines[i], TFT_LIST_TEXT_SCALE, TFT_TITLE_TEXT);
     }
 }
 
-int tft_ble_scan_list_hit_test(int x, int y, int count) {
+int tft_selection_list_hit_test(int x, int y, int count) {
     if (x < TFT_LIST_ROW_X || x >= TFT_LIST_ROW_X + TFT_LIST_ROW_W) return -1;
     if (count > TFT_LIST_MAX_ROWS) count = TFT_LIST_MAX_ROWS;
 
     for (int i = 0; i < count; i++) {
-        int row_y = ble_scan_list_row_y(i);
+        int row_y = selection_list_row_y(i);
         if (y >= row_y && y < row_y + TFT_LIST_ROW_H) return i;
     }
     return -1;

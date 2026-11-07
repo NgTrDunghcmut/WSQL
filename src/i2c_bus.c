@@ -1,7 +1,7 @@
 #include "driver/i2c.h"
 #include "esp_log.h"
 #include "i2c_bus.h"
-#include "pins.h"
+#include "pins_stats.h"
 
 #define I2C_FREQ 100000  // 100 kHz - more tolerant of weak/internal pull-ups than 400 kHz
 

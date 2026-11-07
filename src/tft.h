@@ -31,10 +31,12 @@ int tft_mode_select_hit_test(int x, int y);
 // wired to live data).
 void tft_show_wifi_select(const char *ssid);
 
-// Redraws just the RSSI/AVG/MAX/MIN stat boxes on the WiFi-select
-// screen with live values. Call once per sample after
+// Redraws the RSSI/LATENCY/JITTER main-box lines and the AVG/MAX/MIN
+// RSSI stat boxes on the WiFi-select screen with live values. Pass
+// jitter_ms < 0 before the second successful ping (not enough samples
+// yet) to show a placeholder instead. Call once per sample after
 // tft_show_wifi_select() has drawn the rest of the screen.
-void tft_update_wifi_stats(int rssi, int avg_rssi, int max_rssi, int min_rssi);
+void tft_update_wifi_stats(int rssi, int rtt_ms, int jitter_ms, bool lost, int avg_rssi, int max_rssi, int min_rssi);
 
 // Shows the LoRa-receiver screen: frequency header, and RSSI/SNR/packet
 // count/AVG/MAX/MIN RSSI boxes (shown as placeholders initially).
@@ -52,13 +54,14 @@ void tft_show_ble_screen(const char *target_name);
 // after tft_show_ble_screen() has drawn the rest of the screen.
 void tft_update_ble_stats(bool found, int rssi, int avg_rssi, int max_rssi, int min_rssi);
 
-// Shows a list of up to TFT_LIST_MAX_ROWS tappable rows, one per string
-// in `lines` (e.g. "NAME RSSI:-70"). Pass count=0 to show "SCANNING....".
-void tft_show_ble_scan_list(const char *const *lines, int count);
+// Shows `title`, then up to TFT_LIST_MAX_ROWS tappable rows, one per
+// string in `lines`. Pass count=0 to show `empty_text` instead (e.g.
+// "SCANNING...." while a BLE scan hasn't found anything yet).
+void tft_show_selection_list(const char *title, const char *const *lines, int count, const char *empty_text);
 
 // Given a touch point, returns which row index it falls in (0..count-1),
 // or -1 if outside all rows.
-int tft_ble_scan_list_hit_test(int x, int y, int count);
+int tft_selection_list_hit_test(int x, int y, int count);
 
 // Clears the screen and shows a single centered status message
 // (e.g. "WIFI NOT CONNECTED"). Only characters in font.c render;

@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdint.h>
-#include <limits.h>
 #include <time.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -16,13 +15,22 @@
 #include "touch.h"
 #include "ra01s.h"
 #include "ble_scan.h"
+#include "rolling_stats.h"
+#include "pins_stats.h"
 
-#define SSID "KingSlayer"
-#define PASS "24012001"
-#define GATEWAY_IP "8.8.8.8"
-#define SAMPLE_INTERVAL_MS 1000
-#define LORA_FREQUENCY_HZ 433000000L
-#define LORA_TX_POWER_DBM 22 // SX1262 max; different envelope than the old SX1276 (-3..+22 dBm)
+typedef struct {
+    const char *label;
+    const char *primary_ip;
+    const char *fallback_ip; // NULL if this target has no fallback
+} ping_target_t;
+
+static const ping_target_t PING_TARGETS[] = {
+    { "GOOGLE DNS",     PING_GOOGLE_PRIMARY,     PING_GOOGLE_FALLBACK },
+    { "CLOUDFLARE DNS", PING_CLOUDFLARE_PRIMARY, PING_CLOUDFLARE_FALLBACK },
+    { "OPENDNS",        PING_OPENDNS_PRIMARY,    NULL },
+    { "LOCAL ROUTER",   PING_ROUTER_PRIMARY,     PING_ROUTER_FALLBACK },
+};
+#define PING_TARGET_COUNT (int)(sizeof(PING_TARGETS) / sizeof(PING_TARGETS[0]))
 
 // Non-blocking: true if a touch landed on the back button just now.
 static bool back_button_tapped(void) {
@@ -62,8 +70,67 @@ static int wait_for_mode_selection(void) {
     }
 }
 
+// Blocks until a ping-target row is tapped (returns its index) or the
+// back button (-1).
+static int wait_for_ping_target_selection(void) {
+    const char *labels[PING_TARGET_COUNT];
+    for (int i = 0; i < PING_TARGET_COUNT; i++) labels[i] = PING_TARGETS[i].label;
+
+    tft_show_selection_list("SELECT PING TARGET", labels, PING_TARGET_COUNT, "NONE");
+    tft_draw_back_button();
+
+    while (1) {
+        if (back_button_tapped()) return -1;
+
+        int sx, sy;
+        if (touch_read_screen_xy(&sx, &sy)) {
+            int hit = tft_selection_list_hit_test(sx, sy, PING_TARGET_COUNT);
+            if (hit >= 0) return hit;
+            vTaskDelay(300 / portTICK_PERIOD_MS);
+        } else {
+            vTaskDelay(20 / portTICK_PERIOD_MS);
+        }
+    }
+}
+
+// Tries up to 3 pings against ip; true if any of them got a reply.
+static bool ping_target_reachable(const char *ip) {
+    for (int i = 0; i < 3; i++) {
+        int rtt_ms;
+        if (ping_once(ip, &rtt_ms)) return true;
+    }
+    return false;
+}
+
+// Lets the user pick a ping target, verifies it (primary, then
+// fallback if the target has one), and keeps re-showing the selection
+// popup if every address for a chosen target is unreachable. Returns
+// the IP to ping, or NULL if the user backed out instead.
+static const char *select_and_verify_ping_target(void) {
+    while (1) {
+        int target_idx = wait_for_ping_target_selection();
+        if (target_idx < 0) return NULL;
+
+        const ping_target_t *target = &PING_TARGETS[target_idx];
+        printf("Checking reachability of %s (%s)...\n", target->label, target->primary_ip);
+        tft_show_message("CHECKING....");
+
+        if (ping_target_reachable(target->primary_ip)) {
+            return target->primary_ip;
+        }
+        if (target->fallback_ip != NULL && ping_target_reachable(target->fallback_ip)) {
+            return target->fallback_ip;
+        }
+
+        printf("%s unreachable on all addresses\n", target->label);
+        tft_show_message("TARGET UNREACHABLE");
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+        // loop back to the selection popup
+    }
+}
+
 static void run_wifi_mode(void) {
-    wifi_init(SSID, PASS);
+    wifi_init(WIFI_SSID, WIFI_PASS);
 
     for (int i = 0; i < 10; i++) {
         if (wifi_is_connected()) break;
@@ -80,13 +147,25 @@ static void run_wifi_mode(void) {
 
     printf("WiFi connected, RSSI: %d dBm\n", wifi_get_rssi());
     timesync_init(10000);
-    tft_show_wifi_select(SSID);
+
+    const char *ping_ip = select_and_verify_ping_target();
+    if (ping_ip == NULL) {
+        printf("Returning to main menu\n");
+        return;
+    }
+
+    tft_show_wifi_select(WIFI_SSID);
     tft_draw_back_button();
 
-    long rssi_sum = 0;
-    int rssi_count = 0;
-    int rssi_max = INT_MIN;
-    int rssi_min = INT_MAX;
+    rolling_stats_t rssi_stats;
+    rolling_stats_init(&rssi_stats);
+
+    // RFC 3550 smoothed jitter over consecutive successful RTTs, kept
+    // in fixed-point (scaled by 16) the way the RFC's own reference
+    // code does, to avoid float math / printf("%f") entirely.
+    bool have_prev_rtt = false;
+    int prev_rtt_ms = 0;
+    int jitter_accum_x16 = 0;
 
     // Sample RSSI + ping latency/loss once per second, printing each
     // as a JSON line (stands in for an MQTT publish for now), until
@@ -100,23 +179,37 @@ static void run_wifi_mode(void) {
         int64_t start_us = esp_timer_get_time();
 
         int rtt_ms = 0;
-        bool lost = !ping_once(GATEWAY_IP, &rtt_ms);
+        bool lost = !ping_once(ping_ip, &rtt_ms);
         int rssi = wifi_get_rssi();
 
-        rssi_sum += rssi;
-        rssi_count++;
-        if (rssi > rssi_max) rssi_max = rssi;
-        if (rssi < rssi_min) rssi_min = rssi;
-        int rssi_avg = (int)(rssi_sum / rssi_count);
-        tft_update_wifi_stats(rssi, rssi_avg, rssi_max, rssi_min);
+        rolling_stats_push(&rssi_stats, rssi);
+        int rssi_avg, rssi_max, rssi_min;
+        rolling_stats_get(&rssi_stats, &rssi_avg, &rssi_max, &rssi_min);
 
-        char json[128];
-        if (record_to_json(json, sizeof(json), time(NULL), rssi, rtt_ms, lost) >= 0) {
+        // Jitter needs two consecutive successful pings to exist; a
+        // lost ping has no RTT, so it's skipped rather than treated
+        // as a huge delta against the last known-good RTT.
+        int jitter_ms = -1; // -1 = "not enough samples yet"
+        if (!lost) {
+            if (have_prev_rtt) {
+                int d = rtt_ms - prev_rtt_ms;
+                if (d < 0) d = -d;
+                jitter_accum_x16 += d - ((jitter_accum_x16 + 8) >> 4);
+                jitter_ms = jitter_accum_x16 >> 4;
+            }
+            prev_rtt_ms = rtt_ms;
+            have_prev_rtt = true;
+        }
+
+        tft_update_wifi_stats(rssi, rtt_ms, jitter_ms, lost, rssi_avg, rssi_max, rssi_min);
+
+        char json[160];
+        if (record_to_json(json, sizeof(json), time(NULL), rssi, rtt_ms, jitter_ms, lost) >= 0) {
             printf("%s\n", json);
         }
 
         int64_t elapsed_ms = (esp_timer_get_time() - start_us) / 1000;
-        int64_t remaining_ms = SAMPLE_INTERVAL_MS - elapsed_ms;
+        int64_t remaining_ms = WIFI_SAMPLE_INTERVAL_MS - elapsed_ms;
         if (remaining_ms > 0) {
             vTaskDelay(remaining_ms / portTICK_PERIOD_MS);
         }
@@ -150,10 +243,8 @@ static void run_lora_mode(void) {
     tft_show_lora_screen(LORA_FREQUENCY_HZ);
     tft_draw_back_button();
 
-    long rssi_sum = 0;
-    int rssi_count = 0;
-    int rssi_max = INT_MIN;
-    int rssi_min = INT_MAX;
+    rolling_stats_t rssi_stats;
+    rolling_stats_init(&rssi_stats);
     int packet_count = 0;
 
     while (1) {
@@ -171,11 +262,9 @@ static void run_lora_mode(void) {
             GetPacketStatus(&rssi, &snr); // both plain integer dB/dBm now
             packet_count++;
 
-            rssi_sum += rssi;
-            rssi_count++;
-            if (rssi > rssi_max) rssi_max = rssi;
-            if (rssi < rssi_min) rssi_min = rssi;
-            int rssi_avg = (int)(rssi_sum / rssi_count);
+            rolling_stats_push(&rssi_stats, rssi);
+            int rssi_avg, rssi_max, rssi_min;
+            rolling_stats_get(&rssi_stats, &rssi_avg, &rssi_max, &rssi_min);
 
             printf("LoRa packet #%d: \"%s\" RSSI=%d SNR=%d\n",
                    packet_count, (char *)buf, rssi, snr);
@@ -198,7 +287,7 @@ static int wait_for_ble_device_selection(void) {
             ble_scan_get_device_name(i, labels[i], sizeof(labels[i]));
             label_ptrs[i] = labels[i];
         }
-        tft_show_ble_scan_list(label_ptrs, count);
+        tft_show_selection_list("SELECT BLE DEVICE", label_ptrs, count, "SCANNING....");
         tft_draw_back_button();
 
         // Re-draw the list roughly once a second so newly-discovered
@@ -209,7 +298,7 @@ static int wait_for_ble_device_selection(void) {
 
             int sx, sy;
             if (touch_read_screen_xy(&sx, &sy)) {
-                int hit = tft_ble_scan_list_hit_test(sx, sy, count);
+                int hit = tft_selection_list_hit_test(sx, sy, count);
                 if (hit >= 0) return hit;
                 vTaskDelay(300 / portTICK_PERIOD_MS);
             } else {
@@ -269,10 +358,8 @@ static void run_ble_mode(void) {
     tft_show_ble_screen(target_name);
     tft_draw_back_button();
 
-    long rssi_sum = 0;
-    int rssi_count = 0;
-    int rssi_max = INT_MIN;
-    int rssi_min = INT_MAX;
+    rolling_stats_t rssi_stats;
+    rolling_stats_init(&rssi_stats);
 
     while (1) {
         if (back_button_tapped()) {
@@ -284,14 +371,11 @@ static void run_ble_mode(void) {
         int rssi;
         bool found = ble_scan_get_rssi(&rssi);
         if (found) {
-            rssi_sum += rssi;
-            rssi_count++;
-            if (rssi > rssi_max) rssi_max = rssi;
-            if (rssi < rssi_min) rssi_min = rssi;
+            rolling_stats_push(&rssi_stats, rssi);
         }
-        int rssi_avg = (rssi_count > 0) ? (int)(rssi_sum / rssi_count) : 0;
-        tft_update_ble_stats(found, found ? rssi : 0,
-                              rssi_avg, rssi_count > 0 ? rssi_max : 0, rssi_count > 0 ? rssi_min : 0);
+        int rssi_avg = 0, rssi_max = 0, rssi_min = 0;
+        rolling_stats_get(&rssi_stats, &rssi_avg, &rssi_max, &rssi_min);
+        tft_update_ble_stats(found, found ? rssi : 0, rssi_avg, rssi_max, rssi_min);
 
         vTaskDelay(500 / portTICK_PERIOD_MS);
     }

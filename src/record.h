@@ -6,10 +6,12 @@
 #include <time.h>
 
 // Formats one sample as a single-line JSON object into buf, e.g.:
-//   {"timestamp":1758618000,"rssi":-63,"rtt_ms":24,"lost":false}
-// When lost is true, rtt_ms is written as null.
+//   {"timestamp":1758618000,"rssi":-63,"rtt_ms":24,"jitter_ms":3,"lost":false}
+// When lost is true, rtt_ms is written as null. jitter_ms (RFC 3550
+// smoothed jitter, needs at least two successful pings to exist yet)
+// is written as null when jitter_ms < 0.
 // Returns the number of bytes written (excluding the null terminator),
 // or -1 if buf_size was too small to hold the result.
-int record_to_json(char *buf, size_t buf_size, time_t timestamp, int rssi, int rtt_ms, bool lost);
+int record_to_json(char *buf, size_t buf_size, time_t timestamp, int rssi, int rtt_ms, int jitter_ms, bool lost);
 
 #endif

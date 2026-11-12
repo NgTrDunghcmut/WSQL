@@ -2,16 +2,19 @@
 #define RECORD_H
 
 #include <stddef.h>
-#include <stdbool.h>
 #include <time.h>
 
-// Formats one sample as a single-line JSON object into buf, e.g.:
-//   {"timestamp":1758618000,"rssi":-63,"rtt_ms":24,"jitter_ms":3,"lost":false}
-// When lost is true, rtt_ms is written as null. jitter_ms (RFC 3550
-// smoothed jitter, needs at least two successful pings to exist yet)
-// is written as null when jitter_ms < 0.
+// Formats one sample as a single-line JSON object matching the
+// ClickHouse ingestion schema, e.g.:
+//   {"timestamp":1758618000,"node":"KingSlayer","technology":"Wi-Fi",
+//    "rssi":-63,"snr":null,"jitter":3,"latency":24}
+// snr/jitter_ms/latency_ms are written as JSON null when passed as NULL -
+// pass NULL for whichever fields don't apply to this technology (LoRa:
+// snr only; WiFi: jitter/latency only; BLE: neither).
 // Returns the number of bytes written (excluding the null terminator),
 // or -1 if buf_size was too small to hold the result.
-int record_to_json(char *buf, size_t buf_size, time_t timestamp, int rssi, int rtt_ms, int jitter_ms, bool lost);
+int record_to_json(char *buf, size_t buf_size, time_t timestamp,
+                    const char *node, const char *technology, int rssi,
+                    const int *snr, const int *jitter_ms, const int *latency_ms);
 
 #endif

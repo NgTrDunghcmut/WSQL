@@ -6,7 +6,7 @@
 
 // Maximum distinct nearby (named) devices tracked at once (also the
 // max rows shown on the scan-list screen).
-#define BLE_SCAN_MAX_DEVICES 5
+#define BLE_SCAN_MAX_DEVICES 7
 
 // Longest device name stored/displayed, including the null terminator.
 #define BLE_SCAN_NAME_LEN 32

@@ -8,6 +8,4 @@
 // On timeout/failure returns false (packet considered lost).
 bool ping_once(const char *ip, int *rtt_ms);
 
-void ping_gateway(const char *ip);
-
 #endif

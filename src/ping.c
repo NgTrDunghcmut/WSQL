@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <string.h>
 #include "lwip/sockets.h"
 #include "lwip/icmp.h"
@@ -13,7 +12,6 @@ static uint16_t s_seq = 0;
 bool ping_once(const char *ip, int *rtt_ms) {
     int sock = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if (sock < 0) {
-        printf("Error: Cannot create socket\n");
         return false;
     }
 
@@ -58,21 +56,4 @@ bool ping_once(const char *ip, int *rtt_ms) {
         }
         // Not our reply (stray ICMP traffic) - keep waiting until timeout.
     }
-}
-
-void ping_gateway(const char *ip) {
-    printf("=== Ping Test to %s ===\n", ip);
-
-    int lost = 0;
-    for (int i = 0; i < 4; i++) {
-        int rtt_ms = 0;
-        if (ping_once(ip, &rtt_ms)) {
-            printf("Ping %d: reply in %d ms\n", i + 1, rtt_ms);
-        } else {
-            printf("Ping %d: lost (timeout)\n", i + 1);
-            lost++;
-        }
-    }
-
-    printf("Ping complete: %d/4 lost\n\n", lost);
 }

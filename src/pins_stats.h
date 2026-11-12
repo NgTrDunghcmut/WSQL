@@ -10,26 +10,28 @@
 #define I2C_SCL_PIN 22
 
 // ---- SPI bus (TFT display) ----
-#define SPI_SCK_PIN  5
+#define SPI_SCK_PIN  19
 #define SPI_MOSI_PIN 18
 #define SPI_MISO_PIN 22
 
 // ---- TFT control lines (CS is passed to the SPI driver, not toggled manually) ----
-#define TFT_CS_PIN  23
-#define TFT_DC_PIN  19
-#define TFT_RST_PIN 21
+#define TFT_CS_PIN  4
+#define TFT_DC_PIN  17
+#define TFT_RST_PIN 16
 
 // ---- XPT2046 touch controller (shares SCK/MOSI/MISO with the TFT's SPI bus) ----
-#define TOUCH_CS_PIN  32
-#define TOUCH_IRQ_PIN 35
+#define TOUCH_CS_PIN  21
+#define TOUCH_IRQ_PIN 23
 
-// ---- Remote API endpoint ----
-// URL that api_post_send() POSTs sample data to. Fill in before use.
-#define API_POST_URL "http://example.com/api/samples"
+// ---- Remote MQTT publisher ----
+// Broker mqtt_pub_send() publishes sample data to. Fill in the
+// broker's IP before use, e.g. "mqtt://192.168.1.50:1883".
+#define MQTT_BROKER_URI "mqtt://192.168.2.10:1883"
+#define MQTT_TOPIC "data"
 
 // ---- WiFi mode ----
-#define WIFI_SSID "KingSlayer"
-#define WIFI_PASS "24012001"
+#define WIFI_SSID "NguyenPK"
+#define WIFI_PASS "20012401dung"
 #define WIFI_SAMPLE_INTERVAL_MS 1000 // time between RSSI/ping samples
 
 // ---- WiFi ping targets, selectable via the "SELECT PING TARGET" popup ----

@@ -1,24 +1,27 @@
 #include <stdio.h>
 #include "record.h"
 
-int record_to_json(char *buf, size_t buf_size, time_t timestamp, int rssi, int rtt_ms, int jitter_ms, bool lost) {
-    char rtt_field[16];
-    if (lost) {
-        snprintf(rtt_field, sizeof(rtt_field), "null");
+static void format_nullable_int(char *field, size_t field_size, const int *value) {
+    if (value == NULL) {
+        snprintf(field, field_size, "null");
     } else {
-        snprintf(rtt_field, sizeof(rtt_field), "%d", rtt_ms);
+        snprintf(field, field_size, "%d", *value);
     }
+}
 
-    char jitter_field[16];
-    if (jitter_ms < 0) {
-        snprintf(jitter_field, sizeof(jitter_field), "null");
-    } else {
-        snprintf(jitter_field, sizeof(jitter_field), "%d", jitter_ms);
-    }
+int record_to_json(char *buf, size_t buf_size, time_t timestamp,
+                    const char *node, const char *technology, int rssi,
+                    const int *snr, const int *jitter_ms, const int *latency_ms) {
+    char snr_field[16], jitter_field[16], latency_field[16];
+    format_nullable_int(snr_field, sizeof(snr_field), snr);
+    format_nullable_int(jitter_field, sizeof(jitter_field), jitter_ms);
+    format_nullable_int(latency_field, sizeof(latency_field), latency_ms);
 
     int n = snprintf(buf, buf_size,
-        "{\"timestamp\":%lld,\"rssi\":%d,\"rtt_ms\":%s,\"jitter_ms\":%s,\"lost\":%s}",
-        (long long)timestamp, rssi, rtt_field, jitter_field, lost ? "true" : "false");
+        "{\"timestamp\":%lld,\"node\":\"%s\",\"technology\":\"%s\","
+        "\"rssi\":%d,\"snr\":%s,\"jitter\":%s,\"latency\":%s}",
+        (long long)timestamp, node, technology, rssi,
+        snr_field, jitter_field, latency_field);
 
     if (n < 0 || (size_t)n >= buf_size) return -1;
     return n;

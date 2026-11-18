@@ -1,0 +1,4 @@
+paho-mqtt==1.6.1
+clickhouse-driver==0.2.3
+clickhouse-connect==0.7.19
+# traceback

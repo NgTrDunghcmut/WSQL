@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  # 1. Mosquitto MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mqtt_broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    command: mosquitto -c /mosquitto-no-auth.conf
+    restart: always
+
+  # 2. ClickHouse Database
+  clickhouse:
+    image: clickhouse/clickhouse-server:23.8
+    container_name: clickhouse_db
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://clickhouse:8123/ping"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 5
+    restart: always
+  # 3. Python Data & Backend Processor
+  backend:
+    build: ./app
+    container_name: python_processor
+    depends_on:
+      - mosquitto
+      - clickhouse
+    environment:
+      - MQTT_BROKER=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_TOPIC=data
+      - CLICKHOUSE_HOST=clickhouse
+      - CLICKHOUSE_PORT=8123
+    restart: always
+
+  # 4. Grafana Dashboard
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: grafana_dashboard
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - clickhouse
+    restart: always
+
+volumes:
+  clickhouse_data:
+  grafana_data:
